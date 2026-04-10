@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Summarizer — Claude + Outlook</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f7f5;
+    --bg3: #f0ede8;
+    --text: #1a1a1a;
+    --text2: #555550;
+    --text3: #888880;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --blue-bg: #e6f1fb;
+    --blue-text: #0c447c;
+    --green-bg: #eaf3de;
+    --green-text: #3b6d11;
+    --amber-bg: #faeeda;
+    --amber-text: #854f0b;
+    --red-bg: #fcebeb;
+    --red-text: #a32d2d;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c;
+      --bg2: #2a2a28;
+      --bg3: #333330;
+      --text: #f0ede8;
+      --text2: #b0ada8;
+      --text3: #777770;
+      --border: rgba(255,255,255,0.10);
+      --border2: rgba(255,255,255,0.20);
+      --blue-bg: #0c447c;
+      --blue-text: #b5d4f4;
+      --green-bg: #27500a;
+      --green-text: #c0dd97;
+      --amber-bg: #633806;
+      --amber-text: #fac775;
+      --red-bg: #791f1f;
+      --red-text: #f7c1c1;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg2);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  header {
+    background: var(--bg);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { font-size: 15px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue-text); }
+
+  #auth-btn {
+    background: var(--blue-bg);
+    color: var(--blue-text);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  #auth-btn:hover { opacity: 0.85; }
+
+  #user-info { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
+  #logout-btn { background: none; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text2); }
+  #logout-btn:hover { background: var(--bg2); }
+
+  main { max-width: 800px; margin: 2rem auto; padding: 0 1.5rem 4rem; }
+
+  .card {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .card-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 1rem; }
+
+  .form-row { display: grid; gap: 0.75rem; }
+  .form-row.two { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 540px) { .form-row.two { grid-template-columns: 1fr; } }
+
+  label { font-size: 13px; color: var(--text2); display: block; margin-bottom: 4px; }
+
+  input[type=text], input[type=date], select {
+    width: 100%;
+    background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, input[type=date]:focus, select:focus {
+    border-color: var(--blue-text);
+  }
+
+  .btn-primary {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 0.5rem;
+  }
+  .btn-primary:hover { opacity: 0.8; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: none;
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .btn-secondary:hover { background: var(--bg2); }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .tag-blue { background: var(--blue-bg); color: var(--blue-text); }
+  .tag-green { background: var(--green-bg); color: var(--green-text); }
+  .tag-amber { background: var(--amber-bg); color: var(--amber-text); }
+
+  #login-prompt {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  #login-prompt h2 { font-size: 22px; font-weight: 500; margin-bottom: 0.5rem; }
+  #login-prompt p { color: var(--text2); margin-bottom: 1.5rem; font-size: 15px; }
+
+  #app { display: none; }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #status-msg {
+    font-size: 13px;
+    color: var(--text2);
+    margin-top: 0.6rem;
+    min-height: 20px;
+  }
+
+  #emails-found {
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 0.75rem;
+  }
+
+  .email-item {
+    border-top: 0.5px solid var(--border);
+    padding: 0.9rem 0;
+  }
+  .email-item:first-child { border-top: none; }
+  .email-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .email-subject { font-size: 14px; font-weight: 500; color: var(--text); }
+  .email-date { font-size: 12px; color: var(--text3); white-space: nowrap; }
+  .email-preview { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+  #summary-box {
+    background: var(--bg2);
+    border-radius: var(--radius-sm);
+    padding: 1rem 1.25rem;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text);
+    white-space: pre-wrap;
+    min-height: 60px;
+  }
+
+  .export-row { display: flex; gap: 8px; margin-top: 1rem; flex-wrap: wrap; }
+
+  .alert {
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 1rem;
+  }
+  .alert-amber { background: var(--amber-bg); color: var(--amber-text); }
+  .alert-red { background: var(--red-bg); color: var(--red-text); }
+  .alert-green { background: var(--green-bg); color: var(--green-text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    Email Summarizer
+  </div>
+  <div id="header-right">
+    <button id="auth-btn" onclick="signIn()">Entrar com Microsoft</button>
+  </div>
+</header>
+
+<main>
+  <div id="login-prompt">
+    <h2>Resumo de e-mails com IA</h2>
+    <p>Pesquisa e-mails do Outlook e gera um resumo/histórico com o Claude.</p>
+    <button class="btn-primary" onclick="signIn()">Entrar com Microsoft 365</button>
+    <p style="margin-top:1rem; font-size:13px; color:var(--text3);">Os teus e-mails não são guardados — são processados localmente no browser.</p>
+  </div>
+
+  <div id="app">
+
+    <div class="card">
+      <div class="card-title">Pesquisa de e-mails</div>
+      <div class="form-row" style="margin-bottom:0.75rem;">
+        <div>
+          <label>Remetente (e-mail ou nome)</label>
+          <input type="text" id="sender-input" placeholder="ex: joao@empresa.com" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:0.75rem;">
+        <div>
+          <label>Assunto contém (opcional)</label>
+          <input type="text" id="subject-input" placeholder="ex: proposta, reunião..." />
+        </div>
+      </div>
+      <div class="form-row two" style="margin-bottom:0.75rem;">
+        <div>
+          <label>Data inicial</label>
+          <input type="date" id="date-from" />
+        </div>
+        <div>
+          <label>Data final</label>
+          <input type="date" id="date-to" />
+        </div>
+      </div>
+      <div class="form-row two" style="margin-bottom:0.5rem;">
+        <div>
+          <label>Número máximo de e-mails</label>
+          <select id="max-emails">
+            <option value="10">10 e-mails</option>
+            <option value="20" selected>20 e-mails</option>
+            <option value="50">50 e-mails</option>
+          </select>
+        </div>
+        <div>
+          <label>Idioma do resumo</label>
+          <select id="lang-select">
+            <option value="português" selected>Português</option>
+            <option value="inglês">Inglês</option>
+            <option value="espanhol">Espanhol</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn-primary" id="search-btn" onclick="searchEmails()">Pesquisar e-mails</button>
+      <div id="status-msg"></div>
+    </div>
+
+    <div class="card" id="emails-card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div class="card-title" style="margin-bottom:0;">E-mails encontrados</div>
+        <div id="emails-found"></div>
+      </div>
+      <div id="emails-list"></div>
+      <button class="btn-primary" id="summarize-btn" onclick="summarizeEmails()" style="margin-top:1rem;">Gerar resumo com Claude</button>
+    </div>
+
+    <div class="card" id="summary-card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div class="card-title" style="margin-bottom:0;">Resumo / Histórico</div>
+        <span class="tag tag-green">Claude</span>
+      </div>
+      <div id="summary-box"></div>
+      <div class="export-row">
+        <button class="btn-secondary" onclick="exportTxt()">Exportar como .txt</button>
+        <button class="btn-secondary" onclick="exportPdf()">Exportar como PDF</button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const CLIENT_ID = '4c41559f-72a8-4d62-8661-4944700f55f3';
+const TENANT_ID = '98290115-3167-4fc2-afc5-767e44dea42f';
+const AUTHORITY = `https://login.microsoftonline.com/${TENANT_ID}`;
+const SCOPES = ['Mail.Read', 'User.Read'];
+const REDIRECT_URI = window.location.href.split('?')[0].split('#')[0];
+
+let accessToken = null;
+let userEmail = '';
+let userName = '';
+let foundEmails = [];
+let lastSummary = '';
+
+function getTokenFromHash() {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  return params.get('access_token');
+}
+
+function signIn() {
+  const authUrl = `${AUTHORITY}/oauth2/v2.0/authorize` +
+    `?client_id=${CLIENT_ID}` +
+    `&response_type=token` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&scope=${encodeURIComponent(SCOPES.join(' '))}` +
+    `&response_mode=fragment` +
+    `&nonce=${Math.random().toString(36).substring(2)}` +
+    `&prompt=select_account`;
+  window.location.href = authUrl;
+}
+
+function signOut() {
+  accessToken = null;
+  userEmail = '';
+  userName = '';
+  window.location.hash = '';
+  document.getElementById('login-prompt').style.display = 'block';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('header-right').innerHTML = `<button id="auth-btn" onclick="signIn()">Entrar com Microsoft</button>`;
+}
+
+async function init() {
+  const token = getTokenFromHash();
+  if (token) {
+    accessToken = token;
+    window.history.replaceState(null, '', window.location.pathname);
+    await loadUserInfo();
+    document.getElementById('login-prompt').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    const today = new Date();
+    const monthAgo = new Date();
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    document.getElementById('date-to').value = today.toISOString().split('T')[0];
+    document.getElementById('date-from').value = monthAgo.toISOString().split('T')[0];
+  }
+}
+
+async function loadUserInfo() {
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const data = await res.json();
+    userName = data.displayName || '';
+    userEmail = data.mail || data.userPrincipalName || '';
+    document.getElementById('header-right').innerHTML = `
+      <div id="user-info">
+        <span>${userName} <span style="color:var(--text3)">(${userEmail})</span></span>
+        <button id="logout-btn" onclick="signOut()">Sair</button>
+      </div>`;
+  } catch(e) {}
+}
+
+function setStatus(msg, loading=false) {
+  document.getElementById('status-msg').innerHTML = loading
+    ? `<span class="spinner"></span>${msg}`
+    : msg;
+}
+
+async function searchEmails() {
+  const sender = document.getElementById('sender-input').value.trim();
+  if (!sender) { setStatus('Indica um remetente para pesquisar.'); return; }
+
+  const subject = document.getElementById('subject-input').value.trim();
+  const dateFrom = document.getElementById('date-from').value;
+  const dateTo = document.getElementById('date-to').value;
+  const maxEmails = parseInt(document.getElementById('max-emails').value);
+
+  document.getElementById('search-btn').disabled = true;
+  document.getElementById('emails-card').style.display = 'none';
+  document.getElementById('summary-card').style.display = 'none';
+  setStatus('A pesquisar e-mails...', true);
+
+  try {
+    let filter = `from/emailAddress/address eq '${sender}' or contains(from/emailAddress/name, '${sender}')`;
+    let filterParts = [`(from/emailAddress/address eq '${sender}' or contains(from/emailAddress/name, '${sender}'))`];
+
+    if (subject) filterParts.push(`contains(subject, '${subject}')`);
+    if (dateFrom) filterParts.push(`receivedDateTime ge ${dateFrom}T00:00:00Z`);
+    if (dateTo) filterParts.push(`receivedDateTime le ${dateTo}T23:59:59Z`);
+
+    const filterStr = filterParts.join(' and ');
+
+    const url = `https://graph.microsoft.com/v1.0/me/messages?` +
+      `$filter=${encodeURIComponent(filterStr)}` +
+      `&$orderby=receivedDateTime desc` +
+      `&$top=${maxEmails}` +
+      `&$select=subject,from,receivedDateTime,bodyPreview,body`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'Erro na pesquisa');
+    }
+
+    const data = await res.json();
+    foundEmails = data.value || [];
+
+    if (foundEmails.length === 0) {
+      setStatus('Nenhum e-mail encontrado com esses critérios.');
+      document.getElementById('search-btn').disabled = false;
+      return;
+    }
+
+    setStatus('');
+    renderEmails(foundEmails);
+    document.getElementById('emails-card').style.display = 'block';
+
+  } catch(e) {
+    setStatus(`Erro: ${e.message}`);
+  }
+  document.getElementById('search-btn').disabled = false;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('pt-PT', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function renderEmails(emails) {
+  document.getElementById('emails-found').innerHTML = `<span class="tag tag-blue">${emails.length} e-mail${emails.length !== 1 ? 's' : ''}</span>`;
+  const list = document.getElementById('emails-list');
+  list.innerHTML = emails.map(e => `
+    <div class="email-item">
+      <div class="email-meta">
+        <div class="email-subject">${e.subject || '(sem assunto)'}</div>
+        <div class="email-date">${formatDate(e.receivedDateTime)}</div>
+      </div>
+      <div class="email-preview">${(e.bodyPreview || '').substring(0, 120)}${e.bodyPreview?.length > 120 ? '…' : ''}</div>
+    </div>
+  `).join('');
+}
+
+async function summarizeEmails() {
+  if (!foundEmails.length) return;
+  const lang = document.getElementById('lang-select').value;
+  const sender = document.getElementById('sender-input').value.trim();
+
+  document.getElementById('summarize-btn').disabled = true;
+  document.getElementById('summary-card').style.display = 'block';
+  document.getElementById('summary-box').textContent = 'A gerar resumo...';
+
+  const emailsText = foundEmails.map((e, i) => {
+    const body = e.body?.content
+      ? e.body.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 800)
+      : e.bodyPreview || '';
+    return `--- E-mail ${i+1} ---\nData: ${formatDate(e.receivedDateTime)}\nAssunto: ${e.subject || '(sem assunto)'}\nConteúdo: ${body}`;
+  }).join('\n\n');
+
+  const prompt = `Analisa os seguintes e-mails de "${sender}" e cria um resumo/histórico da conversa em ${lang}.
+
+O resumo deve incluir:
+1. Visão geral da relação/contexto com este remetente
+2. Principais tópicos e assuntos abordados
+3. Cronologia dos eventos mais relevantes
+4. Pontos de ação ou decisões importantes (se existirem)
+5. Estado atual / última interação
+
+E-mails (do mais recente para o mais antigo):
+${emailsText}
+
+Responde em ${lang}, de forma clara e organizada.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await res.json();
+    lastSummary = data.content?.[0]?.text || 'Não foi possível gerar o resumo.';
+    document.getElementById('summary-box').textContent = lastSummary;
+
+  } catch(e) {
+    document.getElementById('summary-box').textContent = 'Erro ao contactar o Claude. Tenta novamente.';
+  }
+
+  document.getElementById('summarize-btn').disabled = false;
+}
+
+function exportTxt() {
+  if (!lastSummary) return;
+  const blob = new Blob([lastSummary], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `resumo-emails-${new Date().toISOString().split('T')[0]}.txt`;
+  a.click();
+}
+
+function exportPdf() {
+  if (!lastSummary || !window.jspdf) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const sender = document.getElementById('sender-input').value.trim();
+  doc.setFontSize(16);
+  doc.text(`Resumo de e-mails — ${sender}`, 14, 20);
+  doc.setFontSize(11);
+  doc.setTextColor(100);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-PT')}`, 14, 28);
+  doc.setTextColor(0);
+  doc.setFontSize(11);
+  const lines = doc.splitTextToSize(lastSummary, 182);
+  doc.text(lines, 14, 40);
+  doc.save(`resumo-emails-${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
+init();
+</script>
+</body>
+</html>
