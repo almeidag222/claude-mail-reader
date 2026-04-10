@@ -414,18 +414,16 @@ async function searchEmails() {
   setStatus('A pesquisar e-mails...', true);
 
   try {
-    let filter = `from/emailAddress/address eq '${sender}' or contains(from/emailAddress/name, '${sender}')`;
-    let filterParts = [`(from/emailAddress/address eq '${sender}' or contains(from/emailAddress/name, '${sender}'))`];
+    // Usar $search com KQL (Keyword Query Language) — suportado pelo Graph sem restrições de complexidade
+    let searchParts = [`from:${sender}`];
+    if (subject) searchParts.push(`subject:${subject}`);
+    if (dateFrom) searchParts.push(`received>=${dateFrom}`);
+    if (dateTo) searchParts.push(`received<=${dateTo}`);
 
-    if (subject) filterParts.push(`contains(subject, '${subject}')`);
-    if (dateFrom) filterParts.push(`receivedDateTime ge ${dateFrom}T00:00:00Z`);
-    if (dateTo) filterParts.push(`receivedDateTime le ${dateTo}T23:59:59Z`);
-
-    const filterStr = filterParts.join(' and ');
+    const searchQuery = searchParts.join(' AND ');
 
     const url = `https://graph.microsoft.com/v1.0/me/messages?` +
-      `$filter=${encodeURIComponent(filterStr)}` +
-      `&$orderby=receivedDateTime desc` +
+      `$search=${encodeURIComponent('"' + searchQuery + '"')}` +
       `&$top=${maxEmails}` +
       `&$select=subject,from,receivedDateTime,bodyPreview,body`;
 
