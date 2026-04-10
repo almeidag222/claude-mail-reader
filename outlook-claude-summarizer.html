@@ -322,6 +322,7 @@
 
 <script>
 const CLIENT_ID = '4c41559f-72a8-4d62-8661-4944700f55f3';
+const ANTHROPIC_API_KEY = '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';
 const TENANT_ID = '98290115-3167-4fc2-afc5-767e44dea42f';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT_ID}`;
 const SCOPES = ['Mail.Read', 'User.Read'];
@@ -529,7 +530,7 @@ Responde em ${lang}, de forma clara e organizada.`;
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
