@@ -414,18 +414,20 @@ async function searchEmails() {
   setStatus('A pesquisar e-mails...', true);
 
   try {
-    // Usar $search com KQL (Keyword Query Language) — suportado pelo Graph sem restrições de complexidade
-    let searchParts = [`from:${sender}`];
-    if (subject) searchParts.push(`subject:${subject}`);
-    if (dateFrom) searchParts.push(`received>=${dateFrom}`);
-    if (dateTo) searchParts.push(`received<=${dateTo}`);
+    // Usar apenas $filter simples com um único campo — sem OR, sem contains no from
+    // Filtrar só por data se fornecida, buscar mais e filtrar o resto no cliente
+    let filterParts = [];
+    if (dateFrom) filterParts.push(`receivedDateTime ge ${dateFrom}T00:00:00Z`);
+    if (dateTo) filterParts.push(`receivedDateTime le ${dateTo}T23:59:59Z`);
 
-    const searchQuery = searchParts.join(' AND ');
+    let url = `https://graph.microsoft.com/v1.0/me/messages?` +
+      `&$top=100` +
+      `&$select=subject,from,receivedDateTime,bodyPreview,body` +
+      `&$orderby=receivedDateTime desc`;
 
-    const url = `https://graph.microsoft.com/v1.0/me/messages?` +
-      `$search=${encodeURIComponent('"' + searchQuery + '"')}` +
-      `&$top=${maxEmails}` +
-      `&$select=subject,from,receivedDateTime,bodyPreview,body`;
+    if (filterParts.length > 0) {
+      url += `&$filter=${encodeURIComponent(filterParts.join(' and '))}`;
+    }
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -437,7 +439,23 @@ async function searchEmails() {
     }
 
     const data = await res.json();
-    foundEmails = data.value || [];
+    let emails = data.value || [];
+
+    // Filtrar por remetente e assunto no cliente (sem restrições do Graph)
+    const senderLower = sender.toLowerCase();
+    emails = emails.filter(e => {
+      const fromAddr = (e.from?.emailAddress?.address || '').toLowerCase();
+      const fromName = (e.from?.emailAddress?.name || '').toLowerCase();
+      const matchSender = fromAddr.includes(senderLower) || fromName.includes(senderLower);
+      const matchSubject = subject
+        ? (e.subject || '').toLowerCase().includes(subject.toLowerCase())
+        : true;
+      return matchSender && matchSubject;
+    });
+
+    emails = emails.slice(0, maxEmails);
+
+    foundEmails = emails;
 
     if (foundEmails.length === 0) {
       setStatus('Nenhum e-mail encontrado com esses critérios.');
@@ -448,11 +466,15 @@ async function searchEmails() {
     setStatus('');
     renderEmails(foundEmails);
     document.getElementById('emails-card').style.display = 'block';
+    document.getElementById('search-btn').disabled = false;
+    return;
 
   } catch(e) {
     setStatus(`Erro: ${e.message}`);
+    document.getElementById('search-btn').disabled = false;
+    return;
   }
-  document.getElementById('search-btn').disabled = false;
+
 }
 
 function formatDate(dateStr) {
